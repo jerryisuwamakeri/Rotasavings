@@ -1,0 +1,206 @@
+openapi: 3.0.3
+info:
+  title: ROTASAVINGS API
+  version: "1.0.0"
+  description: >
+    Hybrid ROSCA infrastructure. The blockchain is the system of truth; this API
+    is the orchestration layer. Authenticate with a Bearer access token from
+    /v1/auth/login; renew it with /v1/auth/refresh. Mutating requests accept an
+    optional Idempotency-Key header.
+servers:
+  - url: http://localhost:8080
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Error:
+      type: object
+      properties:
+        error: { type: string }
+    TokenPair:
+      type: object
+      properties:
+        access_token: { type: string }
+        refresh_token: { type: string }
+    User:
+      type: object
+      properties:
+        id: { type: string }
+        email: { type: string }
+        display_name: { type: string }
+        wallet_address: { type: string }
+        kyc_status: { type: string, enum: [pending, approved, rejected] }
+        role: { type: string, enum: [member, admin] }
+        status: { type: string, enum: [active, suspended] }
+    Group:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        organizer_id: { type: string }
+        contribution_amount: { type: integer, format: int64 }
+        cycle_length: { type: string, example: "168h" }
+        max_members: { type: integer }
+        members: { type: array, items: { type: string } }
+        payout_order: { type: array, items: { type: string } }
+        state: { type: string, enum: [CREATED, ACTIVE, SETTLEMENT, CLOSED] }
+security:
+  - bearerAuth: []
+paths:
+  /healthz:
+    get:
+      summary: Liveness probe
+      security: []
+      responses: { "200": { description: OK } }
+  /readyz:
+    get:
+      summary: Readiness probe (checks datastore)
+      security: []
+      responses:
+        "200": { description: ready }
+        "503": { description: datastore unavailable }
+  /metrics:
+    get:
+      summary: Prometheus metrics
+      security: []
+      responses: { "200": { description: metrics in text exposition format } }
+  /v1/auth/register:
+    post:
+      summary: Register a member (KYC pending)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, display_name, wallet_address]
+              properties:
+                email: { type: string }
+                password: { type: string, minLength: 8 }
+                display_name: { type: string }
+                wallet_address: { type: string }
+                kyc_provider: { type: string }
+                kyc_signature: { type: string }
+      responses:
+        "201": { description: created, content: { application/json: { schema: { $ref: "#/components/schemas/User" } } } }
+        "409": { description: email already registered }
+  /v1/auth/login:
+    post:
+      summary: Exchange credentials for a token pair
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string }
+                password: { type: string }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/TokenPair" } } } }
+        "401": { description: invalid credentials }
+  /v1/auth/refresh:
+    post:
+      summary: Exchange a refresh token for a new token pair
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token: { type: string }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/TokenPair" } } } }
+        "401": { description: invalid or expired refresh token }
+  /v1/me:
+    get:
+      summary: Current user
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/User" } } } } }
+  /v1/groups:
+    get:
+      summary: List groups (paginated)
+      parameters:
+        - { name: offset, in: query, schema: { type: integer } }
+        - { name: limit, in: query, schema: { type: integer } }
+      responses: { "200": { description: OK } }
+    post:
+      summary: Create a group
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, contribution_amount, cycle_length, max_members]
+              properties:
+                name: { type: string }
+                contribution_amount: { type: integer, format: int64 }
+                cycle_length: { type: string, example: "168h" }
+                max_members: { type: integer, minimum: 2 }
+      responses:
+        "201": { description: created, content: { application/json: { schema: { $ref: "#/components/schemas/Group" } } } }
+  /v1/groups/{id}/activate:
+    post:
+      summary: Fix payout order and activate (organizer)
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                payout_order: { type: array, items: { type: string } }
+      responses: { "200": { description: OK } }
+  /v1/groups/{id}/contributions:
+    post:
+      summary: Contribute to a cycle (charges, then reveals commitment)
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [cycle_index]
+              properties:
+                cycle_index: { type: integer }
+                source: { type: string, description: funding instrument (e.g. mobile-money MSISDN) }
+      responses: { "201": { description: created } }
+  /v1/groups/{id}/liquidity:
+    get:
+      summary: Liquidity-stress assessment for a group
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: OK } }
+  /v1/admin/overview:
+    get:
+      summary: Platform KPIs (admin)
+      responses:
+        "200": { description: OK }
+        "403": { description: admin role required }
+  /v1/admin/kyc/pending:
+    get:
+      summary: KYC review queue (admin)
+      responses: { "200": { description: OK } }
+  /v1/admin/kyc/{id}/decision:
+    post:
+      summary: Approve or reject KYC (admin)
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [approve]
+              properties:
+                approve: { type: boolean }
+      responses: { "200": { description: OK } }

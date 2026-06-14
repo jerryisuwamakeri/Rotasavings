@@ -1,0 +1,7 @@
+# SQLite cache (regenerated; not source of truth)
+*.db
+*.db-wal
+*.db-shm
+
+# Build output
+/rota-server

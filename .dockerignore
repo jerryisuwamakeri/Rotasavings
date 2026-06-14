@@ -1,0 +1,11 @@
+.git
+.github
+**/*.db
+**/*.db-wal
+**/*.db-shm
+rota-server
+frontend/node_modules
+frontend/.next
+contracts/out
+contracts/cache
+contracts/lib

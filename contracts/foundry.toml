@@ -1,0 +1,13 @@
+[profile.default]
+src = "src"
+out = "out"
+libs = ["lib"]
+solc_version = "0.8.24"
+optimizer = true
+optimizer_runs = 200
+
+# Build the Go-consumable ABI/bin artifacts the EVM TruthLayer expects:
+#   forge build --extra-output-files abi bin
+# Then regenerate bindings if using abigen, or load the ABIs at runtime
+# (internal/chain/evm reads ABIs by hand — see that package).
+extra_output_files = ["abi", "bin"]

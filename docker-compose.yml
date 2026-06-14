@@ -1,0 +1,35 @@
+# Local stack: Postgres + the ROTASAVINGS backend. The backend auto-applies the
+# schema on boot, so no separate migration step is needed for a fresh database.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: rota
+      POSTGRES_PASSWORD: rota
+      POSTGRES_DB: rota
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rota"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ROTA_HTTP_ADDR: ":8080"
+      ROTA_POSTGRES_DSN: "postgres://rota:rota@postgres:5432/rota?sslmode=disable"
+      ROTA_JWT_SECRET: "change-me-in-production"
+      ROTA_ADMIN_EMAIL: "admin@rotasavings.local"
+      ROTA_ADMIN_PASSWORD: "changeme123"
+    ports:
+      - "8080:8080"
+
+volumes:
+  pgdata:
