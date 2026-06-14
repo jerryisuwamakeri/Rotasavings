@@ -6,10 +6,10 @@ engine advises (never enforces); and a Next.js dashboard operates it.
 
 This repository now contains all four layers:
 
-- Go backend (orchestration, auth, payments, scheduler, intelligence, admin API)
+- Go backend (orchestration, auth, payments, scheduler, intelligence, member + admin APIs)
 - Solidity contracts (the truth layer) + a go-ethereum client behind the same interface
 - Real persistence (SQLite for dev, PostgreSQL for production, one interface)
-- Next.js admin dashboard
+- Next.js web app: member dashboard + admin console, responsive, with charts
 
 ## Architectural rules (enforced by package boundaries)
 
@@ -46,7 +46,7 @@ This repository now contains all four layers:
 |  \- config/             Env-driven config
 |- migrations/            PostgreSQL schema (source of truth for the schema)
 |- contracts/             Solidity contracts (IdentityRegistry, ReputationLedger, RotasavingsGroup)
-|- frontend/              Next.js 15 admin dashboard
+|- frontend/              Next.js 15 web app (member dashboard + admin console)
 |- Dockerfile, docker-compose.yml, .github/workflows/ci.yml
 ```
 
@@ -65,14 +65,16 @@ payment provider, and seeds an admin account. No external services required.
 docker compose up --build     # backend on :8080, Postgres on :5432
 ```
 
-### With the admin dashboard
+### With the web app
 
 ```bash
 cd frontend && npm install
 NEXT_PUBLIC_API_URL=http://localhost:8080 npm run dev   # http://localhost:3000
 ```
 
-Sign in with the seeded admin (`admin@rotasavings.local` / `changeme123`).
+Sign in at `/login`; the seeded admin (`admin@rotasavings.local` / `changeme123`)
+lands on the admin console, members land on the member dashboard. Use
+`./scripts/seed.sh` to create demo member accounts.
 
 ## Datastore selection
 
@@ -188,12 +190,14 @@ cd contracts && forge build && forge test               # contracts (needs Found
 
 CI (`.github/workflows/ci.yml`) runs all three on push and pull request.
 
-## Remaining work (honest)
-
+## Future additions.
 - Reconcile the commitment scheme so the EVM group-lifecycle writes are driven
-  on-chain end to end (contracts and identity/subscribe paths are done).
+  on-chain end to end. The contracts and the identity/subscribe paths are done;
+  the group writes return `ErrNotWired` until the off-chain (sha256 over string
+  IDs) and on-chain (keccak over addresses) schemes are unified.
 - Real payment adapters (M-Pesa, MTN MoMo, Paystack, Flutterwave, bank) behind
-  `payments.Provider` (mock today).
-- Real notification channels (FCM/APNs/SMS/email) behind `notify.Notifier`.
-- ML model training/backtesting and an off-chain feature pipeline.
-- A member-facing app (the admin dashboard is built; the member UI is not).
+  `payments.Provider` (a mock provider is what exists on this system).
+- Push/SMS/email notification channels behind `notify.Notifier` (the in-app feed
+  and webhook delivery already work; FCM/APNs/SMS/email do not).
+- ML model training/backtesting and an off-chain feature pipeline (the
+  intelligence engines are transparent heuristics, not learned models).
